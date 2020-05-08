@@ -8,17 +8,40 @@ const cors = require("cors");
 
 const server = express();
 connectDB();
-server.use(cors({ origin: true, credentials: true }));
 
-let tickers;
+let companies = [];
+let scores = {};
+let finalScores = {}
+let user = {};
+const RETURN_NUMBER = 20;
+
+server.use(cors({ origin: true, credentials: true }));
 
 server.get('/', (req, res) => res.json(parseAll()));
 server.get('/scrape', (req, res) => {
-    scrape("AAPL")
+    scrape("TSLA")
         .then((data) => {
             res.json(data);
         });
 });
+server.get('/testscore', (req, res) => {
+    let companies = [];
+    for (let company in parseAll()) {
+        companies.push(company);
+    }
+    testPopulate(companies);
+    for (let company of companies) {
+        finalScores[company] = calcScore(user, scores[company]);
+    }
+    res.json(returnStocks(finalScores, companies));
+});
+server.get('/testscore2/:ticker', (req, res) => {
+    scrape(req.params.ticker)
+        .then((data) => {
+            res.json(calcIndexes(data));
+        });
+});
+
 
 let config = {
     headers: {
@@ -34,13 +57,34 @@ const port = process.env.PORT || 8000;
 
 server.listen(port, () => console.log(`Server running on port ${port}`));
 
-//size, risk, dividends, efficiency, profitability, growth, value, sum
+function testPopulate(companies) {
+    for (let company of companies) {
+        scores[company] = {
+            "size": Math.random()*20000000000,
+            "risk": Math.random() * 2 - 1,
+            "dividends": Math.random(),
+            "efficiency": Math.random(),
+            "profitability": Math.random(),
+            "growth": Math.random(),
+            "value": Math.random()
+        };
+    }
+    user = {
+        "size": 1,
+        "risk": 1,
+        "dividends": 0.25,
+        "efficiency": 1,
+        "profitability": 0.75,
+        "growth": 1,
+        "value": 0.2
+    };
+}
+
+//size, risk, dividends, efficiency, profitability, growth, value
 
 function calcScore(userScore, stockScore) {
-    let sum = userScore["sum"];
     let score = 0;
     for (let category in userScore) {
-        userScore[category] = userScore[category]/sum;
         score += userScore[category] * stockScore[category];
     }
     return score;
@@ -84,17 +128,25 @@ function pegRatio(peg) {
     return 1/peg;
 }
 
+function returnStocks(scores, companies) {
+    companies.sort((a,b) => {
+        return scores[b] - scores[a];
+    });
+    return companies.slice(0,RETURN_NUMBER);
+}
+
 function calcIndexes (data) {
     let result = {};
-    result["size"] = marketCap(data["Market Cap (intraday) 5"]);
+    result["size"] = marketCap(data["Market Cap (intraday)"]);
     result["risk"] = data["Beta (5Y Monthly)"];
-    result["dividends"] = dividendYield(data["Forward Annual Dividend Yield 4"]);
+    result["dividends"] = dividendYield(data["Forward Annual Dividend Yield"]);
     result["efficiency"] = returnOnAssets(data["Return on Assets (ttm)"]);
     result["profitability"] = (profitMargin(data["Profit Margin"]) +
                                operatingMargin(data["Operating Margin (ttm)"]) +
                                returnOnEquity(data["Return on Equity (ttm)"])) / 3;
-    result["growth"] = peRatio(data["Trailing P/E"]);
-    result["value"] = pegRatio(data["PEG Ratio (5 yr expected) 1"]);
+    result["growth"] = peRatio(data["Forward P/E"]);
+    result["value"] = pegRatio(data["PEG Ratio (5 yr expected)"]);
+    return result;
 }
 
 function scrape(ticker) {
@@ -107,9 +159,7 @@ function scrape(ticker) {
             table.each(function() {
                 for (let i = 0; i < this.childNodes.length; i++) {
                     let val = convertToNum($(this.childNodes[i].childNodes[1]).text());
-                    if (val) {
-                        vals[$(this.childNodes[i].childNodes[0]).text().trim()] = val;
-                    }
+                    vals[removeFootnotes($(this.childNodes[i].childNodes[0]).text().trim())] = val;
                 }
             });
             return vals;
@@ -122,11 +172,20 @@ function scrape(ticker) {
 
 function scrapeAll() {
     let data = {}
-    for (let company of parseAll()) {
+    for (let company in companies) {
         data[company] = scrape(company)
             .then((response) => {
                 return response;
             });
+    }
+}
+
+function removeFootnotes(data) {
+    let nums = ["1", "2", "3", "4", "5", "6", "7", "8", "9"];
+    if (nums.includes(data.slice(-1))) {
+        return data.slice(0,-2);
+    } else {
+        return data;
     }
 }
 
@@ -159,9 +218,13 @@ function convertToNum(text) {
 
 
 function parseAll() {
-   tickers = fs.readFileSync('./src/russell3000.csv')
+    let result = {};
+    let tickers = fs.readFileSync('./src/russell3000.csv')
       .toString()
-       .split(',');
-   console.log(tickers);
-   return tickers;
+       .split('\r\n');
+    for (let stock of tickers) {
+       stock = stock.split(",");
+       result[stock[0]] = stock[1];
+    }
+    return result;
 }
