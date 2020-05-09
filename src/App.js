@@ -15,7 +15,7 @@ class getStock extends React.Component {
 
   componentDidMount() {
     axios
-        .get('http://localhost:8000/test')
+        .get('http://localhost:8000/api/stocks/AAPL')
         .then(res => {
             console.log(res.data);
             let keys = [];
@@ -44,8 +44,6 @@ class getStock extends React.Component {
         </div>
     )
   }
-
-
 }
 
 

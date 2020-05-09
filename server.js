@@ -5,24 +5,27 @@ const cheerio = require('cheerio');
 const csv = require("csv-parser");
 const fs = require("fs");
 const cors = require("cors");
-
+const stocks = require('./routes/api/stocks');
+const bodyParser = require('body-parser');
 const server = express();
+const Stock = require('./models/Stock');
 connectDB();
 
-let companies = [];
+
+let companies = parseAll();
 let scores = {};
 let finalScores = {}
 let user = {};
 const RETURN_NUMBER = 20;
 
 server.use(cors({ origin: true, credentials: true }));
+server.use('/api/stocks', stocks);
+server.use(bodyParser.json());
 
 server.get('/', (req, res) => res.json(parseAll()));
 server.get('/scrape', (req, res) => {
-    scrape("TSLA")
-        .then((data) => {
-            res.json(data);
-        });
+    scrapeAll();
+    res.json("scraping");
 });
 server.get('/testscore', (req, res) => {
     let companies = [];
@@ -41,17 +44,6 @@ server.get('/testscore2/:ticker', (req, res) => {
             res.json(calcIndexes(data));
         });
 });
-
-
-let config = {
-    headers: {
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp, image/apng,*/*;q=0.8,application/signed-exchange;v=b3",
-        "Accept-Encoding": "gzip",
-        "Accept-Language": "en-US,en;q=0.9,es;q=0.8",
-        "Upgrade-Insecure-Requests": "1",
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/76.0.3809.132 Safari/537.36"
-    }
-}
 
 const port = process.env.PORT || 8000;
 
@@ -81,6 +73,23 @@ function testPopulate(companies) {
 }
 
 //size, risk, dividends, efficiency, profitability, growth, value
+
+function handleRequest(userScore) {
+    let companies = [];
+    let scores = {};
+    let companyScores = Stock.find()
+        .then((stocks) => {
+            for (let company of stocks) {
+                companies.push(company["ticker"]);
+                scores[company["ticker"]] = calcScore(userScore, company);
+            }
+            return returnStocks(scores, companies);
+        })
+        .catch((err) => {
+            return  { msg: "no stocks in db!" };
+        });
+    return companyScores;
+}
 
 function calcScore(userScore, stockScore) {
     let score = 0;
@@ -150,7 +159,7 @@ function calcIndexes (data) {
 }
 
 function scrape(ticker) {
-    return axios("https://ca.finance.yahoo.com/quote/" + ticker + "/key-statistics", config)
+    return axios("https://ca.finance.yahoo.com/quote/" + ticker + "/key-statistics")
         .then((response) => {
             console.log(ticker);
             let $ = cheerio.load(response.data);
@@ -175,8 +184,24 @@ function scrapeAll() {
     for (let company in companies) {
         data[company] = scrape(company)
             .then((response) => {
-                return response;
+                let temp = calcIndexes(response);
+                temp["ticker"] = company;
+                Stock.findOneAndUpdate({ticker: company}, temp, {upsert: true});
+                console.log(company + " posted");
+            })
+            .catch((err) => {
+                console.log("couldn't find stock page");
             });
+    }
+    return data;
+}
+
+function sleep(milliseconds) {
+    var start = new Date().getTime();
+    for (var i = 0; i < 1e7; i++) {
+        if ((new Date().getTime() - start) > milliseconds){
+            break;
+        }
     }
 }
 
@@ -228,3 +253,5 @@ function parseAll() {
     }
     return result;
 }
+
+module.exports = {handleRequest};
