@@ -19,15 +19,15 @@ router.get('/:ticker', (req,res) => {
     console.log(req.params.ticker);
     Stock.findOne({ticker: req.params.ticker})
         .then((stock) => {
-            res.json(JSON.parse(stock));
+            res.json(stock);
         }).catch((err) => {
-            res.status(404).json({ nostockfound: "stock does not exist in database"})
+            res.status(404).json(err.message);
         });
 });
 
 router.put('/:ticker', (req,res) => {
     console.log(req.params.ticker);
-    Stock.findOneAndUpdate({ticker: req.params.ticker}, req.body)
+    Stock.findOneAndUpdate({ticker: req.params.ticker}, req.body, {upsert: true, new: true})
         .then((stock) => {
             res.json({ msg: "added stock successfully" });
         }).catch((err) => {

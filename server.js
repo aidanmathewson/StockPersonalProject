@@ -175,7 +175,7 @@ function scrape(ticker) {
         })
         .catch(function (err) {
             console.log("error");
-            return err;
+            throw err;
         });
 }
 
@@ -186,8 +186,14 @@ function scrapeAll() {
             .then((response) => {
                 let temp = calcIndexes(response);
                 temp["ticker"] = company;
-                Stock.findOneAndUpdate({ticker: company}, temp, {upsert: true});
-                console.log(company + " posted");
+                Stock.findOneAndUpdate({ticker: company}, temp, {upsert: true, new: true})
+                    .then((result) => {
+                        console.log(company + " posted");
+                    })
+                    .catch((err) => {
+                        console.log("couldn't post " + company);
+                        console.error(err.message);
+                    });
             })
             .catch((err) => {
                 console.log("couldn't find stock page");
@@ -215,6 +221,7 @@ function removeFootnotes(data) {
 }
 
 function convertToNum(text) {
+    text = text.replace(/,/g, "");
     let last = text[text.length - 1];
     switch(last) {
         case "T":
