@@ -177,15 +177,6 @@ function scrapeAll() {
     return data;
 }
 
-function sleep(milliseconds) {
-    var start = new Date().getTime();
-    for (var i = 0; i < 1e7; i++) {
-        if ((new Date().getTime() - start) > milliseconds){
-            break;
-        }
-    }
-}
-
 function removeFootnotes(data) {
     let nums = ["1", "2", "3", "4", "5", "6", "7", "8", "9"];
     if (nums.includes(data.slice(-1))) {
