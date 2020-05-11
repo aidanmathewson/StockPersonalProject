@@ -42,7 +42,8 @@
     ]
   },
   "devDependencies": {
-    "csv-parser": "^2.3.2"
+    "csv-parser": "^2.3.2",
+    "rc-slider": "^9.2.4"
   },
   "proxy": "http://localhost:8000/"
 }

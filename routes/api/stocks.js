@@ -15,6 +15,15 @@ router.get('/', (req,res) => {
     });
 });
 
+router.delete('/', (req,res) => {
+    Stock.deleteMany()
+        .then((stocks) => {
+            res.json(stocks);
+        }).catch((err) => {
+        res.status(404).json({ nostockfound: "no stocks in database"})
+    });
+});
+
 router.get('/:ticker', (req,res) => {
     console.log(req.params.ticker);
     Stock.findOne({ticker: req.params.ticker})

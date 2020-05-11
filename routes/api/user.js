@@ -1,7 +1,7 @@
+const server = require("../../server");
 const express = require('express');
 const router = express.Router();
 const bodyParser = require('body-parser');
-const server = require('../../server');
 router.use(bodyParser.json());
 router.use(bodyParser.urlencoded({ extended: true }));
 

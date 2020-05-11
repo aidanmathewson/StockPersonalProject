@@ -6,6 +6,7 @@ const csv = require("csv-parser");
 const fs = require("fs");
 const cors = require("cors");
 const stocks = require('./routes/api/stocks');
+const user = require('./routes/api/user');
 const bodyParser = require('body-parser');
 const server = express();
 const Stock = require('./models/Stock');
@@ -15,11 +16,11 @@ connectDB();
 let companies = parseAll();
 let scores = {};
 let finalScores = {}
-let user = {};
 const RETURN_NUMBER = 20;
 
 server.use(cors({ origin: true, credentials: true }));
 server.use('/api/stocks', stocks);
+server.use('/api/user', user);
 server.use(bodyParser.json());
 
 server.get('/', (req, res) => res.json(parseAll()));
@@ -27,54 +28,23 @@ server.get('/scrape', (req, res) => {
     scrapeAll();
     res.json("scraping");
 });
-server.get('/testscore', (req, res) => {
-    let companies = [];
-    for (let company in parseAll()) {
-        companies.push(company);
-    }
-    testPopulate(companies);
-    for (let company of companies) {
-        finalScores[company] = calcScore(user, scores[company]);
-    }
-    res.json(returnStocks(finalScores, companies));
-});
-server.get('/testscore2/:ticker', (req, res) => {
-    scrape(req.params.ticker)
-        .then((data) => {
-            res.json(calcIndexes(data));
-        });
+server.post('/', (req,res) => {
+    handleRequest(req.body)
+        .then((stocks) => {
+            res.json(stocks);
+        }).catch((err) => {
+        res.status(400).json({ error: "unable to get score"})
+    });
 });
 
 const port = process.env.PORT || 8000;
 
 server.listen(port, () => console.log(`Server running on port ${port}`));
 
-function testPopulate(companies) {
-    for (let company of companies) {
-        scores[company] = {
-            "size": Math.random()*20000000000,
-            "risk": Math.random() * 2 - 1,
-            "dividends": Math.random(),
-            "efficiency": Math.random(),
-            "profitability": Math.random(),
-            "growth": Math.random(),
-            "value": Math.random()
-        };
-    }
-    user = {
-        "size": 1,
-        "risk": 1,
-        "dividends": 0.25,
-        "efficiency": 1,
-        "profitability": 0.75,
-        "growth": 1,
-        "value": 0.2
-    };
-}
-
 //size, risk, dividends, efficiency, profitability, growth, value
 
 function handleRequest(userScore) {
+    console.log(userScore);
     let companies = [];
     let scores = {};
     let companyScores = Stock.find()
@@ -83,6 +53,7 @@ function handleRequest(userScore) {
                 companies.push(company["ticker"]);
                 scores[company["ticker"]] = calcScore(userScore, company);
             }
+            console.log(scores);
             return returnStocks(scores, companies);
         })
         .catch((err) => {
@@ -110,31 +81,35 @@ function marketCap(mCap) {
 }
 
 function  peRatio(pe) {
-    return pe/40; //average pe is close to 20, giving an average company a score of 0.5
+    return Math.max(Math.min(pe/40, 2), -1); //average pe is close to 20, giving an average company a score of 0.5
 }
 
 function profitMargin(margin) {
-    return margin/0.3;
+    return Math.max(Math.min(margin/0.3, 2), -1);
 }
 
 function operatingMargin(margin) {
-    return margin/0.4;
+    return Math.max(Math.min(margin/0.4, 2), -1);
 }
 
 function returnOnAssets(roa) {
-    return roa/0.05;
+    return Math.max(Math.min(roa/0.05, 2), -1);
 }
 
 function returnOnEquity(roe) {
-    return roe/0.2;
+    return Math.max(Math.min(roe/0.2, 2), -1);
 }
 
 function dividendYield(div) {
-    return div/0.05;
+    return Math.max(Math.min(div/0.05, 2), -1);
 }
 
 function pegRatio(peg) {
-    return 1/peg;
+    if(peg === 0) {
+        return 0;
+    } else {
+        return Math.max(Math.min(1 / peg, 2), -1);
+    }
 }
 
 function returnStocks(scores, companies) {
@@ -251,7 +226,7 @@ function convertToNum(text) {
 
 function parseAll() {
     let result = {};
-    let tickers = fs.readFileSync('./src/russell3000.csv')
+    let tickers = fs.readFileSync('./data/russell3000.csv')
       .toString()
        .split('\r\n');
     for (let stock of tickers) {
