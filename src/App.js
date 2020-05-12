@@ -113,7 +113,7 @@ const GetStock = (props) => {
             <p>How important is it to you that a company is profitable?</p>
             <p style={{float: "left"}}> less important </p>
             <p style={{float: "right"}}> more important </p>
-            <ProfitSlide id={"profit"} onChange={updateVals}/>
+            <ProfitSlide id={"profitability"} onChange={updateVals}/>
         </div>
         <div style = {{height: "80px"}}>
             <p>How important is it to you that a company is growing quickly?</p>

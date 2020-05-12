@@ -14,8 +14,6 @@ connectDB();
 
 
 let companies = parseAll();
-let scores = {};
-let finalScores = {}
 const RETURN_NUMBER = 20;
 
 server.use(cors({ origin: true, credentials: true }));
@@ -57,7 +55,7 @@ function handleRequest(userScore) {
             return returnStocks(scores, companies);
         })
         .catch((err) => {
-            return  { msg: "no stocks in db!" };
+            throw err;
         });
     return companyScores;
 }
@@ -155,26 +153,33 @@ function scrape(ticker) {
 }
 
 function scrapeAll() {
-    let data = {}
+    let companiesArray = [];
+    let counter = -1;
     for (let company in companies) {
-        data[company] = scrape(company)
+        companiesArray.push(company);
+    }
+    const scrapeFunc = setInterval(() => {
+        counter++;
+        scrape(companiesArray[counter])
             .then((response) => {
                 let temp = calcIndexes(response);
-                temp["ticker"] = company;
-                Stock.findOneAndUpdate({ticker: company}, temp, {upsert: true, new: true})
+                temp["ticker"] = companiesArray[counter];
+                Stock.findOneAndUpdate({ticker: companiesArray[counter]}, temp, {upsert: true, new: true})
                     .then((result) => {
-                        console.log(company + " posted");
+                        console.log(companiesArray[counter] + " posted");
                     })
                     .catch((err) => {
-                        console.log("couldn't post " + company);
+                        console.log("couldn't post " + companiesArray[counter]);
                         console.error(err.message);
                     });
             })
             .catch((err) => {
                 console.log("couldn't find stock page");
             });
-    }
-    return data;
+        if (counter >= companiesArray.length) {
+            clearInterval(scrapeFunc);
+        }
+    }, 1000);
 }
 
 function removeFootnotes(data) {
