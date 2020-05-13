@@ -1,4 +1,4 @@
-const server = require("../../server");
+const server = require("../../app");
 const express = require('express');
 const router = express.Router();
 const bodyParser = require('body-parser');
@@ -22,9 +22,9 @@ router.put('/:id', (req,res) => {
     console.log(req.params.ticker);
     User.findByIdAndUpdate(req.body)
         .then((user) => {
-            res.json({ msg: "unable to calculate score" });
+            res.json({ msg: "user added" });
         }).catch((err) => {
-        res.status(400).json({ error: "unable to add stock"})
+        res.status(400).json({ error: "unable to update user"})
     });
 });
 
@@ -33,7 +33,7 @@ router.post('/', (req,res) => {
         .then((stocks) => {
             res.json(stocks);
         }).catch((err) => {
-        res.status(400).json({ error: "unable to get score"})
+        res.status(400).json({ error: "unable to add user"})
     });
 });
 

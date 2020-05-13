@@ -2,7 +2,6 @@ const express = require('express');
 const connectDB = require('./config/db');
 const axios = require('axios');
 const cheerio = require('cheerio');
-const csv = require("csv-parser");
 const fs = require("fs");
 const cors = require("cors");
 const stocks = require('./routes/api/stocks');
@@ -12,20 +11,18 @@ const server = express();
 const Stock = require('./models/Stock');
 connectDB();
 
-
-let companies = parseAll();
-const RETURN_NUMBER = 20;
-
 server.use(cors({ origin: true, credentials: true }));
 server.use('/api/stocks', stocks);
 server.use('/api/user', user);
 server.use(bodyParser.json());
 
-server.get('/', (req, res) => res.json(parseAll()));
-server.get('/scrape', (req, res) => {
+const RETURN_NUMBER = 20;
+const SCRAPE = false;
+let companies = parseAll();
+if (SCRAPE) {
     scrapeAll();
-    res.json("scraping");
-});
+}
+
 server.post('/', (req,res) => {
     handleRequest(req.body)
         .then((stocks) => {
@@ -179,7 +176,7 @@ function scrapeAll() {
         if (counter >= companiesArray.length) {
             clearInterval(scrapeFunc);
         }
-    }, 1000);
+    }, 1500);
 }
 
 function removeFootnotes(data) {
