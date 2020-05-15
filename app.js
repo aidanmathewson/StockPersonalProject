@@ -16,11 +16,12 @@ server.use('/api/stocks', stocks);
 server.use('/api/user', user);
 server.use(bodyParser.json());
 
-const RETURN_NUMBER = 20;
-const SCRAPE = false;
+const RETURN_NUMBER = 20; //number of stocks to return to client
+const SCRAPE = false; //scrape on startup? TODO: have this true on first boot of day, then false
 let companies = parseAll();
 if (SCRAPE) {
-    scrapeAll();
+    scrapeAll(companies)
+        .then(() => console.log("scrape finished"));
 }
 
 server.post('/', (req,res) => {
@@ -28,6 +29,7 @@ server.post('/', (req,res) => {
         .then((stocks) => {
             res.json(stocks);
         }).catch((err) => {
+            console.error(err.message);
         res.status(400).json({ error: "unable to get score"})
     });
 });
@@ -39,22 +41,20 @@ server.listen(port, () => console.log(`Server running on port ${port}`));
 //size, risk, dividends, efficiency, profitability, growth, value
 
 function handleRequest(userScore) {
-    console.log(userScore);
     let companies = [];
     let scores = {};
-    let companyScores = Stock.find()
+    return Stock.find()
         .then((stocks) => {
+            console.log(stocks);
             for (let company of stocks) {
                 companies.push(company["ticker"]);
                 scores[company["ticker"]] = calcScore(userScore, company);
             }
-            console.log(scores);
             return returnStocks(scores, companies);
         })
         .catch((err) => {
             throw err;
         });
-    return companyScores;
 }
 
 function calcScore(userScore, stockScore) {
@@ -80,26 +80,26 @@ function  peRatio(pe) {
 }
 
 function profitMargin(margin) {
-    return Math.max(Math.min(margin/0.3, 2), -1);
+    return Math.max(Math.min(margin/0.3, 2), -1); //a good PM is 0.3, giving a good company a score of 1
 }
 
 function operatingMargin(margin) {
-    return Math.max(Math.min(margin/0.4, 2), -1);
+    return Math.max(Math.min(margin/0.4, 2), -1); //a good OM is 0.4, giving a good company a score of 1
 }
 
 function returnOnAssets(roa) {
-    return Math.max(Math.min(roa/0.05, 2), -1);
+    return Math.max(Math.min(roa/0.05, 2), -1); //a good ROA is 0.05, giving a good company a score of 1
 }
 
 function returnOnEquity(roe) {
-    return Math.max(Math.min(roe/0.2, 2), -1);
+    return Math.max(Math.min(roe/0.2, 2), -1); //a good ROE is 0.05, giving a good company a score of 1
 }
 
 function dividendYield(div) {
-    return Math.max(Math.min(div/0.05, 2), -1);
+    return Math.max(Math.min(div/0.05, 2), -1); //a good ROE is 0.05, giving a good company a score of 1
 }
 
-function pegRatio(peg) {
+function pegRatio(peg) { //lower is perceived as better here, so the inverse is given as a score
     if(peg === 0) {
         return 0;
     } else {
@@ -107,13 +107,20 @@ function pegRatio(peg) {
     }
 }
 
-function returnStocks(scores, companies) {
-    companies.sort((a,b) => {
+//sorts stocks by score and returns top RETURN_NUMBER stocks
+function returnStocks(scores, stocks) {
+    let result = {};
+    stocks.sort((a,b) => {
         return scores[b] - scores[a];
     });
-    return companies.slice(0,RETURN_NUMBER);
+    for (let i = 0; i < RETURN_NUMBER; i++) {
+        result[stocks[i]] = companies[stocks[i]];
+    }
+    console.log(result);
+    return result;
 }
 
+//returns result array of stocks scores taking parsed stock data as input
 function calcIndexes (data) {
     let result = {};
     result["size"] = marketCap(data["Market Cap (intraday)"]);
@@ -128,14 +135,15 @@ function calcIndexes (data) {
     return result;
 }
 
+//scrapes yahoo finance site for the given ticker
 function scrape(ticker) {
     return axios("https://ca.finance.yahoo.com/quote/" + ticker + "/key-statistics")
         .then((response) => {
             console.log(ticker);
             let $ = cheerio.load(response.data);
-            let table = $('tbody');
+            let table = $('tbody'); //table is an array of all tables on the page
             let vals = {};
-            table.each(function() {
+            table.each(function() { //for each table, add each item in the table to vals object as key/value pair
                 for (let i = 0; i < this.childNodes.length; i++) {
                     let val = convertToNum($(this.childNodes[i].childNodes[1]).text());
                     vals[removeFootnotes($(this.childNodes[i].childNodes[0]).text().trim())] = val;
@@ -144,41 +152,41 @@ function scrape(ticker) {
             return vals;
         })
         .catch(function (err) {
-            console.log("error");
+            console.log("error parsing HTML");
             throw err;
         });
 }
 
-function scrapeAll() {
-    let companiesArray = [];
-    let counter = -1;
+//iterates through companies and attempts to scrape each one and save it to the database
+async function scrapeAll(companies) {
     for (let company in companies) {
-        companiesArray.push(company);
+            await scrape(company)
+                .then((response) => {
+                    let temp = calcIndexes(response);
+                    temp["ticker"] = company;
+                    Stock.findOneAndUpdate({ticker: company}, temp, {upsert: true, new: true})
+                        .then((result) => {
+                            console.log(company + " posted");
+                        })
+                        .catch((err) => {
+                            console.log("couldn't post " + company);
+                            console.error(err.message);
+                        });
+                })
+                .catch((err) => {
+                    console.error(err.message);
+                });
+            await wait(1);
     }
-    const scrapeFunc = setInterval(() => {
-        counter++;
-        scrape(companiesArray[counter])
-            .then((response) => {
-                let temp = calcIndexes(response);
-                temp["ticker"] = companiesArray[counter];
-                Stock.findOneAndUpdate({ticker: companiesArray[counter]}, temp, {upsert: true, new: true})
-                    .then((result) => {
-                        console.log(companiesArray[counter] + " posted");
-                    })
-                    .catch((err) => {
-                        console.log("couldn't post " + companiesArray[counter]);
-                        console.error(err.message);
-                    });
-            })
-            .catch((err) => {
-                console.log("couldn't find stock page");
-            });
-        if (counter >= companiesArray.length) {
-            clearInterval(scrapeFunc);
-        }
-    }, 1500);
 }
 
+async function wait(ms) { //making setTimeout return a promise so it can be used asynchronously
+    return new Promise(resolve => {
+        setTimeout(resolve, ms);
+    })
+}
+
+// Takes string as input and returns same string with footnote character and whitespace removed
 function removeFootnotes(data) {
     let nums = ["1", "2", "3", "4", "5", "6", "7", "8", "9"];
     if (nums.includes(data.slice(-1))) {
@@ -188,6 +196,7 @@ function removeFootnotes(data) {
     }
 }
 
+// Takes various string inputs and returns same converted to Number to be stored
 function convertToNum(text) {
     text = text.replace(/,/g, "");
     let last = text[text.length - 1];
@@ -216,7 +225,7 @@ function convertToNum(text) {
     return text;
 }
 
-
+// Parses .csv file containing stock tickers and companies and returns JS object keyed by ticker
 function parseAll() {
     let result = {};
     let tickers = fs.readFileSync('./data/russell3000.csv')
@@ -224,9 +233,7 @@ function parseAll() {
        .split('\r\n');
     for (let stock of tickers) {
        stock = stock.split(",");
-       result[stock[0]] = stock[1];
+       result[stock[0].trim()] = stock[1];
     }
     return result;
 }
-
-module.exports = {handleRequest};
